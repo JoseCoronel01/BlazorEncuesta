@@ -1,0 +1,305 @@
+﻿@page "/"
+@using BlazorEncuesta.Services
+@using BlazorEncuesta.Data
+@rendermode InteractiveServer
+@inject EncuestaService Service
+
+<PageTitle>Dashboard - Encuestas</PageTitle>
+
+<div class="container-fluid py-4">
+    <h2 class="mb-4"><i class="bi bi-speedometer2"></i> Dashboard de Encuestas</h2>
+
+    @* Filtros del Dashboard *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <label class="form-label">Nombre de Encuesta</label>
+                    <input type="text" class="form-control" @bind="query.Nombre" 
+                           placeholder="Filtrar por nombre..." />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label">Emisión Desde</label>
+                    <input type="date" class="form-control" @bind="query.FechaEmisionDesde" />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label">Emisión Hasta</label>
+                    <input type="date" class="form-control" @bind="query.FechaEmisionHasta" />
+                </div>
+                <div class="col-12 col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="CargarDatos">
+                        <i class="bi bi-arrow-clockwise"></i> Actualizar
+                    </button>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-12">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" @bind="query.SoloActivas" id="dashActivas" />
+                        <label class="form-check-label" for="dashActivas">
+                            Solo encuestas activas (emisión a vencimiento + 7 días)
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (stats != null)
+    {
+        @* KPIs *@
+        <div class="row g-4 mb-4">
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card text-white bg-primary shadow h-100">
+                    <div class="card-body text-center">
+                        <h1 class="display-4 fw-bold">@stats.TotalEncuestas</h1>
+                        <p class="mb-0">Total Encuestas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card text-white bg-success shadow h-100">
+                    <div class="card-body text-center">
+                        <h1 class="display-4 fw-bold">@stats.EncuestasActivas</h1>
+                        <p class="mb-0">Activas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card text-white bg-warning shadow h-100">
+                    <div class="card-body text-center">
+                        <h1 class="display-4 fw-bold">@stats.EncuestasPorVencer</h1>
+                        <p class="mb-0">Por Vencer</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card text-white bg-danger shadow h-100">
+                    <div class="card-body text-center">
+                        <h1 class="display-4 fw-bold">@stats.EncuestasVencidas</h1>
+                        <p class="mb-0">Vencidas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card text-white bg-info shadow h-100">
+                    <div class="card-body text-center">
+                        <h1 class="display-4 fw-bold">@stats.TotalPreguntas</h1>
+                        <p class="mb-0">Preguntas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card text-white bg-dark shadow h-100">
+                    <div class="card-body text-center">
+                        <h1 class="display-4 fw-bold">@stats.TotalRespuestas</h1>
+                        <p class="mb-0">Respuestas</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Gráfico de Barras SVG - Responsive *@
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-header">
+                        <h5><i class="bi bi-bar-chart-fill"></i> Respuestas por Encuesta</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (stats.Encuestas.Any())
+                        {
+                            <div class="chart-container" style="overflow-x: auto;">
+                                <svg viewBox="0 0 800 300" class="w-100" style="min-width: 600px;">
+                                    @* Ejes *@
+                                    <line x1="60" y1="20" x2="60" y2="250" stroke="#333" stroke-width="2" />
+                                    <line x1="60" y1="250" x2="780" y2="250" stroke="#333" stroke-width="2" />
+                                    
+                                    @{
+                                        var maxRespuestas = stats.Encuestas.Any() 
+                                            ? stats.Encuestas.Max(e => e.Preguntas.Sum(p => p.TotalRespuestas)) 
+                                            : 1;
+                                        if (maxRespuestas == 0) maxRespuestas = 1;
+                                        
+                                        var barWidth = Math.Min(60, 700 / Math.Max(stats.Encuestas.Count, 1));
+                                        var gap = 20;
+                                        var chartHeight = 220;
+                                    }
+                                    
+                                    @* Barras *@
+                                    @for (int i = 0; i < stats.Encuestas.Count; i++)
+                                    {
+                                        var enc = stats.Encuestas[i];
+                                        var totalResp = enc.Preguntas.Sum(p => p.TotalRespuestas);
+                                        var barHeight = (totalResp / (double)maxRespuestas) * chartHeight;
+                                        var x = 80 + i * (barWidth + gap);
+                                        var y = 250 - barHeight;
+                                        var color = enc.EstaVencida ? "#dc3545" : enc.EstaActiva ? "#198754" : "#0d6efd";
+                                        
+                                        <rect x="@x" y="@y" width="@barWidth" height="@barHeight" 
+                                              fill="@color" opacity="0.8" rx="4">
+                                            <title>@enc.Nombre: @totalResp respuestas</title>
+                                        </rect>
+                                        
+                                        @enc.Clave
+                                        
+                                        @if (barHeight > 20)
+                                        {
+                                            @totalResp
+                                        }
+                                    }
+                                    
+                                    @* Etiqueta Y *@
+                                    <text x="30" y="15" text-anchor="middle" font-size="12" fill="#666">Respuestas</text>
+                                </svg>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-5">
+                                <i class="bi bi-inbox display-4"></i>
+                                <p>No hay datos para mostrar</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Tabla Detalle + Distribución por Tipo de Respuesta *@
+        <div class="row">
+            <div class="col-12 col-xl-8 mb-4">
+                <div class="card shadow h-100">
+                    <div class="card-header">
+                        <h5><i class="bi bi-table"></i> Detalle de Encuestas</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Encuesta</th>
+                                        <th>Emisión</th>
+                                        <th>Vencimiento</th>
+                                        <th class="text-center">Estado</th>
+                                        <th class="text-end">Preguntas</th>
+                                        <th class="text-end">Respuestas</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var e in stats.Encuestas)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold">@e.Nombre</td>
+                                            <td>@e.FechaEmision.ToString("dd/MM/yy")</td>
+                                            <td>@e.FechaVencimiento.ToString("dd/MM/yy")</td>
+                                            <td class="text-center">
+                                                @if (e.EstaActiva && !e.EstaVencida)
+                                                {
+                                                    <span class="badge bg-success">Activa</span>
+                                                }
+                                                else if (e.EstaVencida && e.DiasRestantes > 0)
+                                                {
+                                                    <span class="badge bg-secondary">Vencida (@e.DiasRestantes d)</span>
+                                                }
+                                                else if (e.EstaVencida)
+                                                {
+                                                    <span class="badge bg-dark">Cerrada</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning text-dark">Pendiente</span>
+                                                }
+                                            </td>
+                                            <td class="text-end">@e.Preguntas.Count</td>
+                                            <td class="text-end fw-bold">@e.Preguntas.Sum(p => p.TotalRespuestas)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-4 mb-4">
+                <div class="card shadow h-100">
+                    <div class="card-header">
+                        <h5><i class="bi bi-pie-chart-fill"></i> Tipos de Pregunta</h5>
+                    </div>
+                    <div class="card-body">
+                        @{
+                            var todasPreguntas = stats.Encuestas.SelectMany(e => e.Preguntas).ToList();
+                            var tipos = todasPreguntas.GroupBy(p => p.TipoRespuestaNombre)
+                                .Select(g => new { Nombre = g.Key, Count = g.Count() })
+                                .ToList();
+                            var total = tipos.Sum(t => t.Count);
+                        }
+                        
+                        @if (total > 0)
+                        {
+                            <div class="d-flex flex-column gap-3">
+                                @foreach (var tipo in tipos)
+                                {
+                                    var porcentaje = (tipo.Count / (double)total) * 100;
+                                    var color = tipo.Nombre switch
+                                    {
+                                        "Checkbox" => "bg-danger",
+                                        "RadioButton" => "bg-primary",
+                                        "TextoLibre" => "bg-success",
+                                        _ => "bg-secondary"
+                                    };
+                                    
+                                    <div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="fw-semibold">@tipo.Nombre</span>
+                                            <span class="text-muted">@tipo.Count (@porcentaje.ToString("F1")%)</span>
+                                        </div>
+                                        <div class="progress" style="height: 24px;">
+                                            <div class="progress-bar @color" role="progressbar" 
+                                                 style="width: @porcentaje.ToString("F1")%" 
+                                                 aria-valuenow="@porcentaje" aria-valuemin="0" aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-5">
+                                <p>Sin preguntas registradas</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private EncuestaQuery query = new() { SoloActivas = true, IncluirPreguntas = true };
+    private DashboardStats? stats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        stats = await Service.GetDashboardStatsAsync(query);
+    }
+}

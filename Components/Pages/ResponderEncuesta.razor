@@ -1,0 +1,120 @@
+﻿@page "/responder/{EncuestaClave:int}"
+@using BlazorEncuesta.Services
+@using BlazorEncuesta.Models
+@rendermode InteractiveServer
+@inject EncuestaService Service
+@inject NavigationManager Navigation
+
+<PageTitle>Responder Encuesta</PageTitle>
+
+<div class="container py-5">
+    @if (encuesta == null)
+    {
+        <div class="alert alert-danger">Encuesta no encontrada o no disponible.</div>
+    }
+    else if (!encuesta.EstaActiva)
+    {
+        <div class="alert alert-warning">
+            <h4>Encuesta no disponible</h4>
+            <p>Esta encuesta ha vencido o aún no está activa.</p>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">@encuesta.Nombre</h3>
+                <small>Vence: @encuesta.FechaVencimiento.ToString("dd/MM/yyyy HH:mm")</small>
+            </div>
+            <div class="card-body">
+                @foreach (var p in preguntas)
+                {
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">@p.Nombre</label>
+
+                        @switch (p.TipoRespuestaClave)
+                        {
+                            case 1: // Checkbox
+                                @foreach (var op in p.OpcionesList)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox"
+                                               @onchange="e => ToggleRespuesta(p.Clave, op, (bool)e.Value)" />
+                                        <label class="form-check-label">@op</label>
+                                    </div>
+                                }
+                                break;
+
+                            case 2: // RadioButton
+                                @foreach (var op in p.OpcionesList)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio"
+                                               name="@($"radio_{p.Clave}")"
+                                               @onchange="() => respuestas[p.Clave] = op" />
+                                        <label class="form-check-label">@op</label>
+                                    </div>
+                                }
+                                break;
+
+                            case 3: // TextoLibre
+                                    <textarea class="form-control" rows="3"
+                                              @bind="respuestas[p.Clave]"></textarea>
+                                break;
+                        }
+                    </div>
+                }
+
+                <button class="btn btn-success btn-lg w-100" @onclick="Enviar">
+                    <i class="bi bi-send"></i> Enviar Respuestas
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int EncuestaClave { get; set; }
+
+    private Encuesta? encuesta;
+    private List<Pregunta> preguntas = new();
+    private Dictionary<int, string> respuestas = new();
+    private Dictionary<int, List<string>> respuestasCheckbox = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        encuesta = await Service.GetEncuestaAsync(EncuestaClave, true);
+        if (encuesta?.Preguntas != null)
+        {
+            preguntas = encuesta.Preguntas;
+            foreach (var p in preguntas)
+            {
+                respuestas[p.Clave] = "";
+                respuestasCheckbox[p.Clave] = new();
+            }
+        }
+    }
+
+    private void ToggleRespuesta(int preguntaClave, string opcion, bool seleccionado)
+    {
+        if (seleccionado)
+            respuestasCheckbox[preguntaClave].Add(opcion);
+        else
+            respuestasCheckbox[preguntaClave].Remove(opcion);
+    }
+
+    private async Task Enviar()
+    {
+        foreach (var p in preguntas)
+        {
+            string respuesta = p.TipoRespuestaClave == 1
+                ? string.Join(",", respuestasCheckbox[p.Clave])
+                : respuestas[p.Clave];
+
+            if (!string.IsNullOrWhiteSpace(respuesta))
+                await Service.GuardarRespuestaAsync(p.Clave, respuesta);
+        }
+
+        Navigation.NavigateTo("/encuestas");
+    }
+}

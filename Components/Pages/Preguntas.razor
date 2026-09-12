@@ -1,0 +1,163 @@
+﻿@page "/preguntas/{EncuestaClave:int}"
+@using BlazorEncuesta.Services
+@using BlazorEncuesta.Models
+@using BlazorEncuesta.Data
+@rendermode InteractiveServer
+@inject EncuestaService Service
+@inject NavigationManager Navigation
+
+<PageTitle>Preguntas de Encuesta</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <button class="btn btn-outline-secondary btn-sm mb-2" @onclick="Volver">
+                <i class="bi bi-arrow-left"></i> Volver
+            </button>
+            <h2><i class="bi bi-question-circle"></i> Preguntas: @encuesta?.Nombre</h2>
+        </div>
+        <button class="btn btn-primary" @onclick="MostrarFormulario">
+            <i class="bi bi-plus-lg"></i> Nueva Pregunta
+        </button>
+    </div>
+
+    <div class="row">
+        @foreach (var p in preguntas)
+        {
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="badge bg-secondary">@p.TipoRespuestaNombre</span>
+                        <div>
+                            <button class="btn btn-sm btn-warning me-1" @onclick="() => Editar(p)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => Eliminar(p.Clave)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="card-title">@p.Nombre</h6>
+                        @if (p.OpcionesList.Any())
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var op in p.OpcionesList)
+                                {
+                                    <li class="list-group-item py-1"><small>@op</small></li>
+                                }
+                            </ul>
+                        }
+                        <hr />
+                        <div class="d-flex justify-content-between text-muted">
+                            <small>Respuestas: @p.TotalRespuestas</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@if (mostrarModal)
+{
+    <div class="modal fade show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(preguntaEditar.Clave == 0 ? "Nueva" : "Editar") Pregunta</h5>
+                    <button type="button" class="btn-close" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" class="form-control" @bind="preguntaEditar.Nombre" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Respuesta</label>
+                        <select class="form-select" @bind="preguntaEditar.TipoRespuestaClave">
+                            @foreach (var tipo in TipoRespuesta.Todos)
+                            {
+                                <option value="@tipo.Clave">@tipo.Nombre</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Opciones (separadas por |)</label>
+                        <textarea class="form-control" rows="3" @bind="opcionesTexto"
+                                  placeholder="Opción 1|Opción 2|Opción 3"></textarea>
+                        <small class="text-muted">Solo para Checkbox y RadioButton</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="Guardar">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [Parameter] public int EncuestaClave { get; set; }
+
+    private Encuesta? encuesta;
+    private List<Pregunta> preguntas = new();
+    private bool mostrarModal = false;
+    private Pregunta preguntaEditar = new();
+    private string opcionesTexto = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        encuesta = await Service.GetEncuestaAsync(EncuestaClave);
+        await CargarPreguntas();
+    }
+
+    private async Task CargarPreguntas()
+    {
+        preguntas = await Service.GetPreguntasAsync(new PreguntaQuery { EncuestaClave = EncuestaClave });
+    }
+
+    private void MostrarFormulario()
+    {
+        preguntaEditar = new() { EncuestaClave = EncuestaClave, TipoRespuestaClave = 1 };
+        opcionesTexto = "";
+        mostrarModal = true;
+    }
+
+    private void Editar(Pregunta p)
+    {
+        preguntaEditar = new Pregunta
+        {
+            Clave = p.Clave,
+            Nombre = p.Nombre,
+            EncuestaClave = p.EncuestaClave,
+            TipoRespuestaClave = p.TipoRespuestaClave,
+            Opciones = p.Opciones
+        };
+        opcionesTexto = p.Opciones ?? "";
+        mostrarModal = true;
+    }
+
+    private void CerrarModal() => mostrarModal = false;
+
+    private async Task Guardar()
+    {
+        preguntaEditar.Opciones = opcionesTexto;
+
+        if (preguntaEditar.Clave == 0)
+            await Service.AgregarPreguntaAsync(preguntaEditar);
+
+        mostrarModal = false;
+        await CargarPreguntas();
+    }
+
+    private async Task Eliminar(int clave)
+    {
+        // Implementar en repositorio si es necesario
+        await CargarPreguntas();
+    }
+
+    private void Volver() => Navigation.NavigateTo("/encuestas");
+}

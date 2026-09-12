@@ -1,0 +1,236 @@
+﻿@page "/encuestas"
+@using BlazorEncuesta.Services
+@using BlazorEncuesta.Models
+@using BlazorEncuesta.Data
+@rendermode InteractiveServer
+@inject EncuestaService Service
+@inject NavigationManager Navigation
+
+<PageTitle>Gestión de Encuestas</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-clipboard-data"></i> Encuestas</h2>
+        <button class="btn btn-primary" @onclick="MostrarFormulario">
+            <i class="bi bi-plus-lg"></i> Nueva Encuesta
+        </button>
+    </div>
+
+    @* Filtros *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Nombre</label>
+                    <input type="text" class="form-control" @bind="query.Nombre" placeholder="Buscar..." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Emisión Desde</label>
+                    <input type="date" class="form-control" @bind="query.FechaEmisionDesde" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Emisión Hasta</label>
+                    <input type="date" class="form-control" @bind="query.FechaEmisionHasta" />
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check me-3">
+                        <input class="form-check-input" type="checkbox" @bind="query.SoloActivas" id="soloActivas" />
+                        <label class="form-check-label" for="soloActivas">Solo Activas</label>
+                    </div>
+                    <button class="btn btn-outline-primary me-2" @onclick="Buscar">
+                        <i class="bi bi-search"></i> Buscar
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="Limpiar">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Tabla *@
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Clave</th>
+                    <th>Nombre</th>
+                    <th>Emisión</th>
+                    <th>Vencimiento</th>
+                    <th>Estado</th>
+                    <th>Preguntas</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in encuestas)
+                {
+                    <tr>
+                        <td>@e.Clave</td>
+                        <td>@e.Nombre</td>
+                        <td>@e.FechaEmision.ToString("dd/MM/yyyy")</td>
+                        <td>@e.FechaVencimiento.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            @if (e.EstaActiva && !e.EstaVencida)
+                            {
+                                <span class="badge bg-success">Activa</span>
+                            }
+                            else if (e.EstaVencida)
+                            {
+                                <span class="badge bg-danger">Vencida</span>
+                                @if (e.DiasRestantes > 0)
+                                {
+                                    <small class="text-muted ms-1">(@e.DiasRestantes días visibles)</small>
+                                }
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning text-dark">Pendiente</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-info" @onclick="() => VerPreguntas(e.Clave)">
+                                <i class="bi bi-list-check"></i> Ver
+                            </button>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-warning me-1" @onclick="() => Editar(e)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => Eliminar(e.Clave)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @* Paginación *@
+    <nav>
+        <ul class="pagination justify-content-center">
+            <li class="page-item @(query.Pagina == 1 ? "disabled" : "")">
+                <button class="page-link" @onclick="() => CambiarPagina(query.Pagina - 1)">Anterior</button>
+            </li>
+            <li class="page-item active">
+                <span class="page-link">@query.Pagina de @totalPaginas</span>
+            </li>
+            <li class="page-item @(query.Pagina >= totalPaginas ? "disabled" : "")">
+                <button class="page-link" @onclick="() => CambiarPagina(query.Pagina + 1)">Siguiente</button>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+@* Modal Formulario *@
+@if (mostrarModal)
+{
+    <div class="modal fade show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(encuestaEditar.Clave == 0 ? "Nueva" : "Editar") Encuesta</h5>
+                    <button type="button" class="btn-close" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" class="form-control" @bind="encuestaEditar.Nombre" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fecha de Emisión</label>
+                        <input type="datetime-local" class="form-control" @bind="encuestaEditar.FechaEmision" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fecha de Vencimiento</label>
+                        <input type="datetime-local" class="form-control" @bind="encuestaEditar.FechaVencimiento" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="Guardar">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<Encuesta> encuestas = new();
+    private EncuestaQuery query = new() { SoloActivas = true, IncluirPreguntas = false };
+    private int totalPaginas = 1;
+    private bool mostrarModal = false;
+    private Encuesta encuestaEditar = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Buscar();
+    }
+
+    private async Task Buscar()
+    {
+        var result = await Service.GetEncuestasAsync(query);
+        encuestas = result.Items;
+        totalPaginas = (int)Math.Ceiling((double)result.Total / query.TamanoPagina);
+        if (totalPaginas < 1) totalPaginas = 1;
+    }
+
+    private async Task CambiarPagina(int pagina)
+    {
+        if (pagina < 1 || pagina > totalPaginas) return;
+        query.Pagina = pagina;
+        await Buscar();
+    }
+
+    private void Limpiar()
+    {
+        query = new() { SoloActivas = true, Pagina = 1 };
+        Buscar();
+    }
+
+    private void MostrarFormulario()
+    {
+        encuestaEditar = new() { FechaEmision = DateTime.Now, FechaVencimiento = DateTime.Now.AddDays(7) };
+        mostrarModal = true;
+    }
+
+    private void Editar(Encuesta e)
+    {
+        encuestaEditar = new Encuesta
+        {
+            Clave = e.Clave,
+            Nombre = e.Nombre,
+            FechaEmision = e.FechaEmision,
+            FechaVencimiento = e.FechaVencimiento
+        };
+        mostrarModal = true;
+    }
+
+    private void CerrarModal() => mostrarModal = false;
+
+    private async Task Guardar()
+    {
+        if (encuestaEditar.Clave == 0)
+            await Service.CrearEncuestaAsync(encuestaEditar);
+        else
+            await Service.ActualizarEncuestaAsync(encuestaEditar);
+
+        mostrarModal = false;
+        await Buscar();
+    }
+
+    private async Task Eliminar(int clave)
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "¿Eliminar esta encuesta?"))
+        {
+            await Service.EliminarEncuestaAsync(clave);
+            await Buscar();
+        }
+    }
+
+    private void VerPreguntas(int clave) => Navigation.NavigateTo($"/preguntas/{clave}");
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+}
